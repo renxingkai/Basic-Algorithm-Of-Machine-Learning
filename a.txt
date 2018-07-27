@@ -1,0 +1,95 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Jul 26 21:10:36 2018
+
+@author: Administrator
+"""
+
+import tensorflow as tf
+import numpy as np
+from tensorflow.examples.tutorials.mnist import input_data
+#加载数据
+mnist=input_data.read_data_sets('MNIST_data/',one_hot=True)
+
+#学习率
+learning_rate=0.01
+#最大训练样本
+max_samples=400000
+batch_size=128
+#间隔10次展示一次结果
+display_step=10
+
+#输入为图像的宽
+n_inputs=28
+#LSTM展开步数为图像的高
+n_steps=28
+#LSTM隐藏层节点数
+n_hidden=256
+#分类数目
+n_classes=10
+
+x=tf.placeholder('float',[None,n_steps,n_inputs])
+y=tf.placeholder('float',[None,n_classes])
+
+#权重和偏置
+#两层LSTM所以为2*hidden
+weights=tf.Variable(tf.random_normal([2*n_hidden,n_classes]))
+bias=tf.Variable(tf.random_normal([n_classes]))
+
+'''
+BiLSTM的生成函数
+'''
+def BiRNN(x,weights,bias):
+    x=tf.transpose(x,[1,0,2])
+    x=tf.reshape(x,[-1,n_inputs])
+    x=tf.split(x,n_steps)
+    #创建前后向LSTM
+    lstm_fw_cell=tf.contrib.rnn.BasicLSTMCell(n_hidden,forget_bias=1.0)
+    lstm_bw_cell=tf.contrib.rnn.BasicLSTMCell(n_hidden,forget_bias=1.0)
+    #生成双向LSTM
+    outputs, _, _ = tf.contrib.rnn.static_bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, x,dtype=tf.float32)
+    return tf.matmul(outputs[-1],weights)+bias
+
+pred=BiRNN(x,weights,bias)
+# Define loss and optimizer
+#cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=y))
+#optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+#求平均损失cost
+cost=tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred,labels=y))
+##Adam优化器
+optimizer=tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+
+correct_pred=tf.equal(tf.argmax(pred,1),tf.argmax(y,1))
+accuracy=tf.reduce_mean(tf.cast(correct_pred,tf.float32))
+#初始化参数
+init=tf.global_variables_initializer()
+
+'''
+训练和测试
+'''
+with tf.Session() as sess:
+    sess.run(init)
+    step=1
+    while step*batch_size<max_samples:
+        batch_x,batch_y=mnist.train.next_batch(batch_size)
+        batch_x=batch_x.reshape((batch_size,n_steps,n_inputs))
+        sess.run(optimizer,feed_dict={x:batch_x,y:batch_y})
+        if step % display_step ==0:
+            acc=sess.run(accuracy,feed_dict={x:batch_x,y:batch_y})
+            loss=sess.run(cost,feed_dict={x:batch_x,y:batch_y})
+            print('Iter'+str(step*batch_size)+',Minibatch loss = {:.6f}'.format(loss),',Train accuracy={:.5f}'.format(acc))
+        step+=1
+    print('Optimizer finish')
+    
+    #测试集
+    test_len=10000
+    test_data=mnist.test.images[:test_len].reshape((-1,n_steps,n_inputs))
+    test_label=mnist.test.labels[:test_len]
+    print('Test accuracy:'.sess.run(accuracy,feed_dict={x:test_data,y:test_label}))
+    
+    
+    
+    
+    
+    
+
